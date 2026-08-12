@@ -81,6 +81,13 @@ final class ProtocolTests: XCTestCase {
         XCTAssertGreaterThan(PrinterProtocol.inkRows(in: emoji).count, PrinterProtocol.inkRows(in: empty).count)
     }
 
+    func testParsesPreviewWithoutAPrinterTarget() throws {
+        XCTAssertEqual(
+            try CLICommand.parse(["preview", "--text", "Hello", "--output", "/tmp/label.png"]),
+            .previewText(lines: ["Hello"], font: "SnellRoundhand", size: 82, inverted: false, output: "/tmp/label.png")
+        )
+    }
+
     func testParsesDeviceNameForPrinterLookup() throws {
         XCTAssertEqual(
             try CLICommand.parse(["print", "--text", "Hello", "--device", "AL-1234"]),

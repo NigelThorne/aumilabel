@@ -170,6 +170,18 @@ struct PrinterProtocol {
         return makeRasterJob(widthDots: widthDots, heightDots: heightDots, pixels: pixels)
     }
 
+    static func writePreviewPNG(of job: PrintJob, to output: String) throws {
+        let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: job.widthDots, pixelsHigh: job.heightDots, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let bytesPerRow = job.widthDots / 8
+        for y in 0..<job.heightDots { for x in 0..<job.widthDots {
+            let byte = job.raster[8 + y * bytesPerRow + x / 8]
+            let black = byte & UInt8(1 << (7 - x % 8)) != 0
+            bitmap.setColor(black ? .black : .white, atX: x, y: job.heightDots - 1 - y)
+        }}
+        guard let data = bitmap.representation(using: .png, properties: [:]) else { throw CLIError.usage("could not encode preview PNG") }
+        try data.write(to: URL(fileURLWithPath: output))
+    }
+
     static func inkRows(in job: PrintJob) -> [Int] {
         let bytesPerRow = job.widthDots / 8
         return (0..<job.heightDots).filter { row in
@@ -295,6 +307,7 @@ enum CLICommand: Equatable {
     case printOverscan(address: String, device: String?)
     case printQR(value: String, address: String, device: String?)
     case printText(lines: [String], font: String, size: Double, inverted: Bool, address: String, device: String?)
+    case previewText(lines: [String], font: String, size: Double, inverted: Bool, output: String)
 
     static func parse(_ arguments: [String]) throws -> CLICommand {
         guard let action = arguments.first else { throw CLIError.usage("a command is required") }
@@ -342,8 +355,10 @@ enum CLICommand: Equatable {
         case "print-overscan":
             guard values.keys.allSatisfy({ ["--address", "--device"].contains($0) }), textLines.isEmpty else { throw CLIError.usage("print-overscan accepts --address or --device") }
             let target = try requireTarget(); return .printOverscan(address: target.0, device: target.1)
-        case "print": 
-            guard values.keys.allSatisfy({ ["--font", "--size", "--address", "--device", "--invert", "--qr"].contains($0) }) else { throw CLIError.usage("print accepts --text, --qr, --font, --size, --invert, --address") }
+        case "print", "preview":
+            let isPreview = action == "preview"
+            let allowed = isPreview ? ["--font", "--size", "--invert", "--output"] : ["--font", "--size", "--address", "--device", "--invert", "--qr"]
+            guard values.keys.allSatisfy({ allowed.contains($0) }) else { throw CLIError.usage("\(action) accepts --text, --font, --size, --invert\(isPreview ? ", --output" : ", --address, --device, --qr")") }
             if let qr = values["--qr"] {
                 guard textLines.isEmpty, !qr.isEmpty else { throw CLIError.usage("--qr cannot be combined with --text and must not be empty") }
                 let target = try requireTarget(); return .printQR(value: qr, address: target.0, device: target.1)
@@ -351,6 +366,9 @@ enum CLICommand: Equatable {
             guard !textLines.isEmpty, textLines.allSatisfy({ !$0.isEmpty }) else { throw CLIError.usage("print requires --text TEXT") }
             let size = Double(values["--size"] ?? "82")
             guard let size, size > 0 else { throw CLIError.usage("--size must be a positive number") }
+            if isPreview {
+                return .previewText(lines: textLines, font: values["--font"] ?? "SnellRoundhand", size: size, inverted: values["--invert"] == "true", output: values["--output"] ?? "aumilabel-preview.png")
+            }
             let target = try requireTarget(); return .printText(lines: textLines, font: values["--font"] ?? "SnellRoundhand", size: size, inverted: values["--invert"] == "true", address: target.0, device: target.1)
         default: throw CLIError.usage("unknown command: \(action)")
         }
@@ -406,7 +424,7 @@ final class PrinterScanner: NSObject, IOBluetoothDeviceInquiryDelegate {
 }
 
 func printHelp() {
-    print("aumilabel — print 15×30 mm labels via Bluetooth\ncommands: scan | status --address ADDRESS | connect --address ADDRESS | calibrate --address ADDRESS | print --text TEXT [--text TEXT ...] [--font NAME] [--size POINTS] [--invert] --address ADDRESS | print --qr VALUE --address ADDRESS")
+    print("aumilabel — print 15×30 mm labels via Bluetooth\ncommands: scan | status --address ADDRESS | connect --address ADDRESS | calibrate --address ADDRESS | print --text TEXT [--text TEXT ...] [--font NAME] [--size POINTS] [--invert] --address ADDRESS | preview --text TEXT [--text TEXT ...] [--font NAME] [--size POINTS] [--invert] [--output FILE.png] | print --qr VALUE --address ADDRESS")
 }
 
 let rawArguments = Array(CommandLine.arguments.dropFirst())
@@ -447,6 +465,10 @@ do {
         let probe = PrinterProbe(); try probe.connect(address: resolvedAddress(address, device))
         try probe.sendPrint(job: job, description: "QR code")
         RunLoop.current.run(until: Date().addingTimeInterval(5)); probe.close()
+    case .previewText(let lines, let font, let size, let inverted, let output):
+        let job = try PrinterProtocol.textLabel(lines: lines, fontName: font, pointSize: CGFloat(size), inverted: inverted)
+        try PrinterProtocol.writePreviewPNG(of: job, to: output)
+        print("Wrote exact \(job.widthDots)×\(job.heightDots)-dot print raster: \(output)")
     case .printText(let lines, let font, let size, let inverted, let address, let device):
         let job = try PrinterProtocol.textLabel(lines: lines, fontName: font, pointSize: CGFloat(size), inverted: inverted)
         let probe = PrinterProbe(); try probe.connect(address: resolvedAddress(address, device))
