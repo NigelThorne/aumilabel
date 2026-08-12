@@ -43,6 +43,14 @@ final class ProtocolTests: XCTestCase {
         XCTAssertGreaterThan(rows.count, 80)
     }
 
+    func testTwoShortLinesSplitTheLabelEvenly() {
+        XCTAssertEqual(PrinterProtocol.twoLineLaneWidths(contentWidth: 86, firstHeight: 20, secondHeight: 25), [43, 43])
+    }
+
+    func testOneShortLineGivesRemainingSpaceToTheOther() {
+        XCTAssertEqual(PrinterProtocol.twoLineLaneWidths(contentWidth: 86, firstHeight: 20, secondHeight: 60), [66, 20])
+    }
+
     func testMultilineLabelLeavesAGapBetweenAppleGothicLines() throws {
         let job = try PrinterProtocol.textLabel(lines: ["❤️ Love you ❤️", "Cath"], fontName: "AppleSDGothicNeo-Bold", pointSize: 82)
         let bytesPerRow = job.widthDots / 8

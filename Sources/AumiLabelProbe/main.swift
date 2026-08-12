@@ -32,6 +32,15 @@ struct PrinterProtocol {
         EmojiShortcodes.values.reduce(text) { result, replacement in result.replacingOccurrences(of: replacement.key, with: replacement.value) }
     }
 
+    static func twoLineLaneWidths(contentWidth: CGFloat, firstHeight: CGFloat, secondHeight: CGFloat) -> [CGFloat] {
+        let half = contentWidth / 2
+        // Only exactly one short line gives its unused space to the other; if both are
+        // short or both are tall, retain a balanced half-and-half layout.
+        if firstHeight < half && secondHeight >= half { return [contentWidth - firstHeight, firstHeight] }
+        if secondHeight < half && firstHeight >= half { return [secondHeight, contentWidth - secondHeight] }
+        return [half, half]
+    }
+
     /// Dimensions sent by the captured AumiLabel print: 96 × 207 dots.
     static let testLabel15x30mm: PrintJob = makeTestLabel(widthDots: 96, heightDots: 207)
     static let blackDiagnosticLabel: PrintJob = makeRasterJob(widthDots: 96, heightDots: 207, pixels: Array(repeating: true, count: 96 * 207))
@@ -122,16 +131,7 @@ struct PrinterProtocol {
         let fittedLines = lines.map(fittedToLongAxis)
         let laneWidths: [CGFloat]
         if lines.count == 2 {
-            let half = contentWide / 2
-            let topHeight = fittedLines[0].1.height
-            let bottomHeight = fittedLines[1].1.height
-            if topHeight < half {
-                laneWidths = [contentWide - topHeight, topHeight]
-            } else if bottomHeight < half {
-                laneWidths = [bottomHeight, contentWide - bottomHeight]
-            } else {
-                laneWidths = [half, half]
-            }
+            laneWidths = twoLineLaneWidths(contentWidth: contentWide, firstHeight: fittedLines[0].1.height, secondHeight: fittedLines[1].1.height)
         } else {
             laneWidths = Array(repeating: contentWide / CGFloat(lines.count), count: lines.count)
         }
