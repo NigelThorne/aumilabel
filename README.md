@@ -2,7 +2,7 @@
 
 A macOS command-line printer driver for 15 × 30 mm AumiLabel thermal labels. It connects directly to the printer's Bluetooth Classic RFCOMM service; the vendor app is not needed.
 
-> Tested with `AL-26C4`, including the [Anko Mini Label Thermal Printer](https://www.kmart.com.au/product/mini-label-thermal-printer-43559312/). This is an unofficial reverse-engineered driver.
+> Tested with the [Anko Mini Label Thermal Printer](https://www.kmart.com.au/product/mini-label-thermal-printer-43559312/). This is an unofficial reverse-engineered driver.
 
 ## Install
 
