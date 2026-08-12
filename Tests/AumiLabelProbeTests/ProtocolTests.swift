@@ -43,6 +43,13 @@ final class ProtocolTests: XCTestCase {
         XCTAssertGreaterThan(rows.count, 80)
     }
 
+    func testMaxFontSizeFitsTextWithinRectangle() throws {
+        let fit = try PrinterProtocol.maxFontFit(text: "Cath", fontName: "AppleSDGothicNeo-Bold", maximumSize: 82, in: NSSize(width: 195, height: 88))
+        XCTAssertEqual(fit.size, 73)
+        XCTAssertLessThanOrEqual(fit.bounds.width, 195)
+        XCTAssertLessThanOrEqual(fit.bounds.height, 88)
+    }
+
     func testTwoShortLinesSplitTheLabelEvenly() {
         XCTAssertEqual(PrinterProtocol.twoLineLaneWidths(contentWidth: 86, firstHeight: 20, secondHeight: 25), [43, 43])
     }

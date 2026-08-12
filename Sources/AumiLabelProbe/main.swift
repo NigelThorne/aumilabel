@@ -32,6 +32,20 @@ struct PrinterProtocol {
         EmojiShortcodes.values.reduce(text) { result, replacement in result.replacingOccurrences(of: replacement.key, with: replacement.value) }
     }
 
+    struct FontFit { let text: NSAttributedString; let bounds: NSRect; let size: CGFloat }
+
+    static func maxFontFit(text: String, fontName: String, maximumSize: CGFloat, in rectangle: NSSize, color: NSColor = .black) throws -> FontFit {
+        guard NSFont(name: fontName, size: maximumSize) != nil else { throw CLIError.unsupportedFont(fontName) }
+        for size in stride(from: maximumSize, through: 8, by: -1) {
+            let attributed = NSAttributedString(string: text, attributes: [.font: NSFont(name: fontName, size: size)!, .foregroundColor: color])
+            let bounds = attributed.boundingRect(with: rectangle, options: [.usesLineFragmentOrigin]).integral
+            if bounds.width <= rectangle.width && bounds.height <= rectangle.height { return FontFit(text: attributed, bounds: bounds, size: size) }
+        }
+        let font = NSFont(name: fontName, size: 8)!
+        let text = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
+        return FontFit(text: text, bounds: text.boundingRect(with: rectangle, options: [.usesLineFragmentOrigin]).integral, size: 8)
+    }
+
     static func twoLineLaneWidths(contentWidth: CGFloat, firstHeight: CGFloat, secondHeight: CGFloat) -> [CGFloat] {
         let half = contentWidth / 2
         // Only exactly one short line gives its unused space to the other; if both are
@@ -109,49 +123,23 @@ struct PrinterProtocol {
         let contentWide = CGFloat(widthDots - 8) - interLineGap * CGFloat(lines.count - 1)
         let textColor = inverted ? NSColor.white : NSColor.black
 
-        func fittedToLongAxis(_ line: String) -> (NSAttributedString, NSRect) {
-            var size = pointSize
-            var font = NSFont(name: fontName, size: size)!
-            var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
-            var text = NSAttributedString(string: line, attributes: attributes)
-            var bounds = text.boundingRect(with: NSSize(width: availableLong, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin])
-            while bounds.width > availableLong && size > 8 {
-                size -= 1
-                font = NSFont(name: fontName, size: size)!
-                attributes[.font] = font
-                text = NSAttributedString(string: line, attributes: attributes)
-                bounds = text.boundingRect(with: NSSize(width: availableLong, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin])
-            }
-            return (text, bounds)
-        }
-
-        // First fit every line to the label's long axis. With exactly two lines, the one
-        // that naturally needs less than half the cross-label space gets just that room;
-        // the other line receives the remainder. When neither is short, split evenly.
-        let fittedLines = lines.map(fittedToLongAxis)
-        let laneWidths: [CGFloat]
-        if lines.count == 2 {
-            laneWidths = twoLineLaneWidths(contentWidth: contentWide, firstHeight: fittedLines[0].1.height, secondHeight: fittedLines[1].1.height)
-        } else {
-            laneWidths = Array(repeating: contentWide / CGFloat(lines.count), count: lines.count)
-        }
+        let fullLineRectangle = NSSize(width: availableLong, height: contentWide)
+        // First calculate each line at its largest size within the whole printable label.
+        let fullFits = try! lines.map { try maxFontFit(text: $0, fontName: fontName, maximumSize: pointSize, in: fullLineRectangle, color: textColor) }
+        let laneWidths: [CGFloat] = lines.count == 2
+            ? twoLineLaneWidths(contentWidth: contentWide, firstHeight: fullFits[0].bounds.height, secondHeight: fullFits[1].bounds.height)
+            : Array(repeating: contentWide / CGFloat(lines.count), count: lines.count)
 
         for (lineIndex, line) in lines.enumerated() {
             // Lines are drawn into source lanes in reverse order because the label rotates.
             let physicalLine = lines.count - 1 - lineIndex
             let availableWide = laneWidths[physicalLine]
-            var (attributedText, bounds) = fittedLines[lineIndex]
-            var size = pointSize
-            while bounds.height > availableWide && size > 8 {
-                size -= 1
-                let font = NSFont(name: fontName, size: size)!
-                attributedText = NSAttributedString(string: line, attributes: [.font: font, .foregroundColor: textColor])
-                bounds = attributedText.boundingRect(with: NSSize(width: availableLong, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin])
-            }
-            let x = max(2, (CGFloat(heightDots) - bounds.width) / 2)
+            // Re-fit against the chosen lane; this is the sole source of font sizing.
+            let fit = try! maxFontFit(text: line, fontName: fontName, maximumSize: pointSize, in: NSSize(width: availableLong, height: availableWide), color: textColor)
+            let x = max(2, (CGFloat(heightDots) - fit.bounds.width) / 2)
             let laneOrigin = 4 + laneWidths.prefix(physicalLine).reduce(0, +) + CGFloat(physicalLine) * interLineGap
-            let y = laneOrigin + (availableWide - bounds.height) / 2
-            attributedText.draw(at: NSPoint(x: x, y: y))
+            let y = laneOrigin + (availableWide - fit.bounds.height) / 2
+            fit.text.draw(at: NSPoint(x: x, y: y))
         }
         context.flushGraphics()
         NSGraphicsContext.restoreGraphicsState()
