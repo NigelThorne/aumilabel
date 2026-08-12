@@ -43,6 +43,18 @@ final class ProtocolTests: XCTestCase {
         XCTAssertGreaterThan(rows.count, 80)
     }
 
+    func testMultilineLabelLeavesAGapBetweenAppleGothicLines() throws {
+        let job = try PrinterProtocol.textLabel(lines: ["❤️ Love you ❤️", "Cath"], fontName: "AppleSDGothicNeo-Bold", pointSize: 82)
+        let bytesPerRow = job.widthDots / 8
+        func columnHasInk(_ column: Int) -> Bool {
+            (0..<job.heightDots).contains { row in
+                let byte = job.raster[8 + row * bytesPerRow + column / 8]
+                return byte & UInt8(1 << (7 - column % 8)) != 0
+            }
+        }
+        XCTAssertFalse(columnHasInk(47), "the centre divider must remain blank between text lines")
+    }
+
     func testExpandsEmojiShortcodesBeforeRendering() {
         XCTAssertEqual(PrinterProtocol.expandEmojiShortcodes("Hello :heart: :fire:"), "Hello ❤️ 🔥")
     }

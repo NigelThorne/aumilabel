@@ -89,26 +89,33 @@ struct PrinterProtocol {
         NSGraphicsContext.current = context
         NSColor.clear.setFill()
         NSBezierPath.fill(NSRect(x: 0, y: 0, width: heightDots, height: widthDots))
+        // Font metrics can underreport script glyph overhang. Clip to the printable inset
+        // so no long-text stroke can escape the label canvas.
+        NSBezierPath(rect: NSRect(x: 4, y: 4, width: heightDots - 8, height: widthDots - 8)).addClip()
         // Fit each line independently along the 30 mm axis; multiple --text flags split the 15 mm width.
-        let availableLong = CGFloat(heightDots - 8)
-        let availableWide = CGFloat(widthDots - 8) / CGFloat(lines.count)
+        let availableLong = CGFloat(heightDots - 12)
+        // Reserve a two-dot gap between text lanes. More importantly, size each line to
+        // its lane on both axes: emoji fallback glyphs can be far taller than script text.
+        let interLineGap: CGFloat = lines.count > 1 ? 2 : 0
+        let availableWide = (CGFloat(widthDots - 8) - interLineGap * CGFloat(lines.count - 1)) / CGFloat(lines.count)
         for (lineIndex, line) in lines.enumerated() {
             var size = pointSize
             var font = NSFont(name: fontName, size: size)!
             var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: inverted ? NSColor.white : NSColor.black]
             var attributedText = NSAttributedString(string: line, attributes: attributes)
-            while attributedText.size().width > availableLong && size > 8 {
+            var bounds = attributedText.boundingRect(with: NSSize(width: availableLong, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin])
+            while (bounds.width > availableLong || bounds.height > availableWide) && size > 8 {
                 size -= 1
                 font = NSFont(name: fontName, size: size)!
                 attributes[.font] = font
                 attributedText = NSAttributedString(string: line, attributes: attributes)
+                bounds = attributedText.boundingRect(with: NSSize(width: availableLong, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin])
             }
-            let bounds = attributedText.boundingRect(with: NSSize(width: availableLong, height: availableWide), options: [.usesLineFragmentOrigin])
-            let x = max(4, (CGFloat(heightDots) - bounds.width) / 2)
+            let x = max(2, (CGFloat(heightDots) - bounds.width) / 2)
             // AppKit's source Y axis becomes the physical across-label axis after rotation.
             // Reverse indices so the first --text line is physically above the next one.
             let physicalLine = lines.count - 1 - lineIndex
-            let y = 4 + CGFloat(physicalLine) * availableWide + (availableWide - bounds.height) / 2
+            let y = 4 + CGFloat(physicalLine) * (availableWide + interLineGap) + (availableWide - bounds.height) / 2
             attributedText.draw(at: NSPoint(x: x, y: y))
         }
         context.flushGraphics()
