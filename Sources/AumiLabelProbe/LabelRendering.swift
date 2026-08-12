@@ -63,8 +63,8 @@ struct PrinterProtocol {
         let half = contentWidth / 2
         // Only exactly one short line gives its unused space to the other; if both are
         // short or both are tall, retain a balanced half-and-half layout.
-        if firstHeight < half && secondHeight >= half { return [contentWidth - firstHeight, firstHeight] }
-        if secondHeight < half && firstHeight >= half { return [secondHeight, contentWidth - secondHeight] }
+        if firstHeight < half && secondHeight >= half { return [firstHeight, contentWidth - firstHeight] }
+        if secondHeight < half && firstHeight >= half { return [contentWidth - secondHeight, secondHeight] }
         return [half, half]
     }
 

@@ -66,8 +66,12 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(PrinterProtocol.twoLineLaneWidths(contentWidth: 86, firstHeight: 20, secondHeight: 25), [43, 43])
     }
 
-    func testOneShortLineGivesRemainingSpaceToTheOther() {
-        XCTAssertEqual(PrinterProtocol.twoLineLaneWidths(contentWidth: 86, firstHeight: 20, secondHeight: 60), [66, 20])
+    func testFirstShortLineKeepsItsNaturalLaneAndGivesRestToSecond() {
+        XCTAssertEqual(PrinterProtocol.twoLineLaneWidths(contentWidth: 86, firstHeight: 20, secondHeight: 60), [20, 66])
+    }
+
+    func testSecondShortLineKeepsItsNaturalLaneAndGivesRestToFirst() {
+        XCTAssertEqual(PrinterProtocol.twoLineLaneWidths(contentWidth: 86, firstHeight: 60, secondHeight: 20), [66, 20])
     }
 
     func testMultilineLabelLeavesAGapBetweenAppleGothicLines() throws {
@@ -79,7 +83,7 @@ final class ProtocolTests: XCTestCase {
                 return byte & UInt8(1 << (7 - column % 8)) != 0
             }
         }
-        XCTAssertFalse(columnHasInk(48), "the divider between the intentionally larger lower lane and top line must remain blank")
+        XCTAssertFalse(columnHasInk(39), "the divider between the intentionally larger lower lane and top line must remain blank")
     }
 
     func testExpandsEmojiShortcodesBeforeRendering() {
