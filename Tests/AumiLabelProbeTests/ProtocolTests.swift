@@ -3,13 +3,13 @@ import XCTest
 
 final class ProtocolTests: XCTestCase {
     func testParsesRepeatedTextArgumentsAsLines() throws {
-        let command = try CLICommand.parse(["print", "--text", "Nigel", "--text", "Cath", "--font", "SignPainter", "--size", "72"])
-        XCTAssertEqual(command, .printText(lines: ["Nigel", "Cath"], font: "SignPainter", size: 72, inverted: false, address: CLICommand.defaultAddress))
+        let command = try CLICommand.parse(["print", "--text", "Nigel", "--text", "Cath", "--font", "SignPainter", "--size", "72", "--address", "25-00-02-00-26-c4"])
+        XCTAssertEqual(command, .printText(lines: ["Nigel", "Cath"], font: "SignPainter", size: 72, inverted: false, address: "25-00-02-00-26-c4"))
     }
 
     func testParsesQRCodePrintFlag() throws {
-        let command = try CLICommand.parse(["print", "--qr", "https://example.com"])
-        XCTAssertEqual(command, .printQR(value: "https://example.com", address: CLICommand.defaultAddress))
+        let command = try CLICommand.parse(["print", "--qr", "https://example.com", "--address", "25-00-02-00-26-c4"])
+        XCTAssertEqual(command, .printQR(value: "https://example.com", address: "25-00-02-00-26-c4"))
     }
 
     func testQRCodeLabelUsesConfirmedCanvasAndContainsInk() throws {
@@ -20,8 +20,8 @@ final class ProtocolTests: XCTestCase {
     }
 
     func testParsesInvertPrintFlag() throws {
-        let command = try CLICommand.parse(["print", "--text", "Nigel", "--invert"])
-        XCTAssertEqual(command, .printText(lines: ["Nigel"], font: "SnellRoundhand", size: 82, inverted: true, address: CLICommand.defaultAddress))
+        let command = try CLICommand.parse(["print", "--text", "Nigel", "--invert", "--address", "25-00-02-00-26-c4"])
+        XCTAssertEqual(command, .printText(lines: ["Nigel"], font: "SnellRoundhand", size: 82, inverted: true, address: "25-00-02-00-26-c4"))
     }
 
     func testInvertedTextLabelHasBlackBackgroundAndWhiteText() throws {
@@ -43,8 +43,12 @@ final class ProtocolTests: XCTestCase {
         XCTAssertGreaterThan(rows.count, 80)
     }
 
-    func testParsesPersistentConnectCommand() throws {
-        XCTAssertEqual(try CLICommand.parse(["connect"]), .connect(address: CLICommand.defaultAddress))
+    func testParsesPersistentConnectCommandWithExplicitAddress() throws {
+        XCTAssertEqual(try CLICommand.parse(["connect", "--address", "25-00-02-00-26-c4"]), .connect(address: "25-00-02-00-26-c4"))
+    }
+
+    func testRejectsPrinterCommandsWithoutAnAddress() {
+        XCTAssertThrowsError(try CLICommand.parse(["connect"]))
     }
 
     func testRejectsPrintWithoutText() {

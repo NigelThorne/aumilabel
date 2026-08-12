@@ -237,7 +237,8 @@ final class PrinterProbe: NSObject, IOBluetoothRFCOMMChannelDelegate {
 }
 
 enum CLICommand: Equatable {
-    static let defaultAddress = "25-00-02-00-26-c4"
+    static let defaultAddress = ProcessInfo.processInfo.environment["AUMILABEL_ADDRESS"] ?? ""
+    case scan
     case status(address: String)
     case connect(address: String)
     case calibrate(address: String)
@@ -266,35 +267,42 @@ enum CLICommand: Equatable {
             index += 2
         }
         let address = values["--address"] ?? defaultAddress
+        func requireAddress() throws -> String {
+            guard !address.isEmpty else { throw CLIError.usage("--address is required; run `aumilabel scan` first, then optionally export AUMILABEL_ADDRESS") }
+            return address
+        }
         switch action {
+        case "scan":
+            guard values.isEmpty, textLines.isEmpty else { throw CLIError.usage("scan accepts no flags") }
+            return .scan
         case "status":
             guard values.keys.allSatisfy({ $0 == "--address" }) else { throw CLIError.usage("status accepts only --address") }
-            return .status(address: address)
+            return .status(address: try requireAddress())
         case "connect":
             guard values.keys.allSatisfy({ $0 == "--address" }) else { throw CLIError.usage("connect accepts only --address") }
-            return .connect(address: address)
+            return .connect(address: try requireAddress())
         case "calibrate":
             guard values.keys.allSatisfy({ $0 == "--address" }) else { throw CLIError.usage("calibrate accepts only --address") }
-            return .calibrate(address: address)
+            return .calibrate(address: try requireAddress())
         case "fonts":
             guard values.keys.allSatisfy({ $0 == "--filter" }) else { throw CLIError.usage("fonts accepts only --filter") }
             return .fonts(filter: values["--filter"])
         case "print-black":
             guard values.keys.allSatisfy({ $0 == "--address" }), textLines.isEmpty else { throw CLIError.usage("print-black accepts only --address") }
-            return .printBlack(address: address)
+            return .printBlack(address: try requireAddress())
         case "print-overscan":
             guard values.keys.allSatisfy({ $0 == "--address" }), textLines.isEmpty else { throw CLIError.usage("print-overscan accepts only --address") }
-            return .printOverscan(address: address)
+            return .printOverscan(address: try requireAddress())
         case "print": 
             guard values.keys.allSatisfy({ ["--font", "--size", "--address", "--invert", "--qr"].contains($0) }) else { throw CLIError.usage("print accepts --text, --qr, --font, --size, --invert, --address") }
             if let qr = values["--qr"] {
                 guard textLines.isEmpty, !qr.isEmpty else { throw CLIError.usage("--qr cannot be combined with --text and must not be empty") }
-                return .printQR(value: qr, address: address)
+                return .printQR(value: qr, address: try requireAddress())
             }
             guard !textLines.isEmpty, textLines.allSatisfy({ !$0.isEmpty }) else { throw CLIError.usage("print requires --text TEXT") }
             let size = Double(values["--size"] ?? "82")
             guard let size, size > 0 else { throw CLIError.usage("--size must be a positive number") }
-            return .printText(lines: textLines, font: values["--font"] ?? "SnellRoundhand", size: size, inverted: values["--invert"] == "true", address: address)
+            return .printText(lines: textLines, font: values["--font"] ?? "SnellRoundhand", size: size, inverted: values["--invert"] == "true", address: try requireAddress())
         default: throw CLIError.usage("unknown command: \(action)")
         }
     }
@@ -323,8 +331,18 @@ enum ProbeError: Error, CustomStringConvertible {
     }
 }
 
+final class PrinterScanner: NSObject, IOBluetoothDeviceInquiryDelegate {
+    let inquiry = IOBluetoothDeviceInquiry()
+    override init() { super.init(); inquiry.delegate = self; inquiry.inquiryLength = 10; inquiry.updateNewDeviceNames = true }
+    func deviceInquiryDeviceFound(_ sender: IOBluetoothDeviceInquiry, device: IOBluetoothDevice) {
+        print("printer: \(device.name ?? "(unnamed)")\naddress: \(device.addressString ?? "unknown")")
+    }
+    func deviceInquiryComplete(_ sender: IOBluetoothDeviceInquiry, error: IOReturn, aborted: Bool) { CFRunLoopStop(CFRunLoopGetMain()) }
+    func scan() throws { guard inquiry.start() == kIOReturnSuccess else { throw CLIError.usage("could not start Bluetooth scan") }; CFRunLoopRun() }
+}
+
 func printHelp() {
-    print("aumilabel — print 15×30 mm labels via Bluetooth\ncommands: status | connect | calibrate | print-black | print-overscan | fonts [--filter TEXT] | print --text TEXT [--text TEXT ...] [--font NAME] [--size POINTS] [--invert] [--address ADDRESS] | print --qr VALUE")
+    print("aumilabel — print 15×30 mm labels via Bluetooth\ncommands: scan | status --address ADDRESS | connect --address ADDRESS | calibrate --address ADDRESS | print --text TEXT [--text TEXT ...] [--font NAME] [--size POINTS] [--invert] --address ADDRESS | print --qr VALUE --address ADDRESS")
 }
 
 let rawArguments = Array(CommandLine.arguments.dropFirst())
@@ -334,6 +352,8 @@ if rawArguments.isEmpty || rawArguments == ["--help"] {
 }
 do {
     switch try CLICommand.parse(rawArguments) {
+    case .scan:
+        try PrinterScanner().scan()
     case .fonts(let filter):
         let matches = NSFontManager.shared.availableFonts.filter { fontName in
             filter.map { fontName.localizedCaseInsensitiveContains($0) } ?? true

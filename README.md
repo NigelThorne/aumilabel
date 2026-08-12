@@ -20,6 +20,13 @@ Ensure `~/.local/bin` is on your `PATH`.
 
 ## Use
 
+Find your printer first, then use its address in commands (or set it once):
+
+```bash
+aumilabel scan
+export AUMILABEL_ADDRESS="25-00-02-00-26-c4" # replace with your printer's address
+```
+
 Load a new roll or fix alignment:
 
 ```bash
