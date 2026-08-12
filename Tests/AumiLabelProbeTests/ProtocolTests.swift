@@ -43,6 +43,14 @@ final class ProtocolTests: XCTestCase {
         XCTAssertGreaterThan(rows.count, 80)
     }
 
+    func testExpandsEmojiShortcodesBeforeRendering() {
+        XCTAssertEqual(PrinterProtocol.expandEmojiShortcodes("Hello :heart: :fire:"), "Hello ❤️ 🔥")
+    }
+
+    func testLeavesUnknownEmojiShortcodesUntouched() {
+        XCTAssertEqual(PrinterProtocol.expandEmojiShortcodes(":not-real:"), ":not-real:")
+    }
+
     func testParsesDeviceNameForPrinterLookup() throws {
         XCTAssertEqual(
             try CLICommand.parse(["print", "--text", "Hello", "--device", "AL-1234"]),

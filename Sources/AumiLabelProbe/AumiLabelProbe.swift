@@ -28,6 +28,15 @@ struct PrinterProtocol {
 
     /// The AumiLabel calibration action: select receipt media then issue LABELV1.
     static let receiptCalibration = Data([0xE7, 0xBA, 0xB8, 0xE5, 0x9E, 0x01]) + Data("LABELV1".utf8)
+    private static let emojiShortcodes = [
+        ":heart:": "❤️", ":smile:": "😊", ":star:": "⭐", ":fire:": "🔥",
+        ":thumbsup:": "👍", ":check:": "✅", ":warning:": "⚠️", ":coffee:": "☕",
+        ":sparkles:": "✨", ":gift:": "🎁", ":home:": "🏠", ":party:": "🎉",
+    ]
+
+    static func expandEmojiShortcodes(_ text: String) -> String {
+        emojiShortcodes.reduce(text) { result, replacement in result.replacingOccurrences(of: replacement.key, with: replacement.value) }
+    }
 
     /// Dimensions sent by the captured AumiLabel print: 96 × 207 dots.
     static let testLabel15x30mm: PrintJob = makeTestLabel(widthDots: 96, heightDots: 207)
@@ -70,7 +79,7 @@ struct PrinterProtocol {
 
     static func textLabel(lines: [String], fontName: String, pointSize: CGFloat, inverted: Bool = false) throws -> PrintJob {
         guard NSFont(name: fontName, size: pointSize) != nil else { throw CLIError.unsupportedFont(fontName) }
-        return makeCursiveLabel(lines: lines, fontName: fontName, pointSize: pointSize, inverted: inverted, widthDots: 96, heightDots: 207)
+        return makeCursiveLabel(lines: lines.map(expandEmojiShortcodes), fontName: fontName, pointSize: pointSize, inverted: inverted, widthDots: 96, heightDots: 207)
     }
 
     private static func makeCursiveLabel(lines: [String], fontName: String, pointSize: CGFloat, inverted: Bool = false, widthDots: Int, heightDots: Int) -> PrintJob {

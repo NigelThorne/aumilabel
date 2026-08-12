@@ -44,7 +44,7 @@ aumilabel print --device AL-1234 --text "Nigel loves you" --text "Cath" --font S
 aumilabel print --device AL-1234 --text "Hello" --font SnellRoundhand --invert
 ```
 
-Long text automatically shrinks to fit. Repeating `--text` produces multiple lines; the first is above the next.
+Long text automatically shrinks to fit. Repeating `--text` produces multiple lines; the first is above the next. Supported emoji shortcodes include `:heart:`, `:smile:`, `:star:`, `:fire:`, `:thumbsup:`, `:check:`, `:warning:`, `:coffee:`, `:sparkles:`, `:gift:`, `:home:`, and `:party:`.
 
 Print a QR code:
 
