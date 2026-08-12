@@ -28,14 +28,8 @@ struct PrinterProtocol {
 
     /// The AumiLabel calibration action: select receipt media then issue LABELV1.
     static let receiptCalibration = Data([0xE7, 0xBA, 0xB8, 0xE5, 0x9E, 0x01]) + Data("LABELV1".utf8)
-    private static let emojiShortcodes = [
-        ":heart:": "❤️", ":smile:": "😊", ":star:": "⭐", ":fire:": "🔥",
-        ":thumbsup:": "👍", ":check:": "✅", ":warning:": "⚠️", ":coffee:": "☕",
-        ":sparkles:": "✨", ":gift:": "🎁", ":home:": "🏠", ":party:": "🎉",
-    ]
-
     static func expandEmojiShortcodes(_ text: String) -> String {
-        emojiShortcodes.reduce(text) { result, replacement in result.replacingOccurrences(of: replacement.key, with: replacement.value) }
+        EmojiShortcodes.values.reduce(text) { result, replacement in result.replacingOccurrences(of: replacement.key, with: replacement.value) }
     }
 
     /// Dimensions sent by the captured AumiLabel print: 96 × 207 dots.

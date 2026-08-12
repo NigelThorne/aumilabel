@@ -51,6 +51,10 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(PrinterProtocol.expandEmojiShortcodes(":not-real:"), ":not-real:")
     }
 
+    func testExpandsGitHubEmojiAliasesFromBundledDataset() {
+        XCTAssertEqual(PrinterProtocol.expandEmojiShortcodes(":tada: :+1: :green_heart:"), "🎉 👍 💚")
+    }
+
     func testParsesDeviceNameForPrinterLookup() throws {
         XCTAssertEqual(
             try CLICommand.parse(["print", "--text", "Hello", "--device", "AL-1234"]),
