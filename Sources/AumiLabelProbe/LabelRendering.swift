@@ -166,8 +166,9 @@ struct PrinterProtocol {
     }
 
     static func previewCoordinate(x: Int, y: Int, width: Int, height: Int) -> (x: Int, y: Int) {
-        // Rotate anticlockwise, then mirror horizontally for an upright label preview.
-        (height - 1 - y, width - 1 - x)
+        // The PNG bitmap row convention supplies the final horizontal mirror. This
+        // coordinate map is the corresponding 90° anticlockwise rotation.
+        (y, width - 1 - x)
     }
 
     static func writePreviewPNG(of job: PrintJob, to output: String) throws {
