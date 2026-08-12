@@ -150,11 +150,11 @@ final class ProtocolTests: XCTestCase {
         ])
     }
 
-    func testCanonicalCanvasMapsDirectlyToPrinterRaster() {
+    func testCanonicalCanvasReflectsBeforeMappingToPrinterRaster() {
         let first = PrinterProtocol.canonicalToPrinterCoordinate(x: 0, y: 0)
-        XCTAssertEqual(first.x, 95); XCTAssertEqual(first.y, 0)
+        XCTAssertEqual(first.x, 95); XCTAssertEqual(first.y, 206)
         let last = PrinterProtocol.canonicalToPrinterCoordinate(x: 206, y: 95)
-        XCTAssertEqual(last.x, 0); XCTAssertEqual(last.y, 206)
+        XCTAssertEqual(last.x, 0); XCTAssertEqual(last.y, 0)
     }
 
     func testBlackDiagnosticFillsEveryRasterByte() {

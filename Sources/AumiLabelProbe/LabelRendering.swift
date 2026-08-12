@@ -24,8 +24,9 @@ struct PrinterProtocol {
     static let canonicalHeight = 96
 
     static func canonicalToPrinterCoordinate(x: Int, y: Int) -> (x: Int, y: Int) {
-        // Clockwise conversion to the printer's 96×207 raster orientation.
-        (canonicalHeight - 1 - y, x)
+        // Reflect the normal canvas horizontally, then rotate clockwise into the
+        // printer's 96×207 raster orientation (the printer prints back-to-front).
+        (canonicalHeight - 1 - y, canonicalWidth - 1 - x)
     }
 
     static let observedProbeCommands: [Data] = [
@@ -177,7 +178,7 @@ struct PrinterProtocol {
             let byte = job.raster[8 + y * bytesPerRow + x / 8]
             guard byte & UInt8(1 << (7 - x % 8)) != 0 else { continue }
             // Decode the printer raster through the same canonical mapping used to encode it.
-            let canonicalX = y
+            let canonicalX = canonicalWidth - 1 - y
             let canonicalY = canonicalHeight - 1 - x
             let offset = (canonicalHeight - 1 - canonicalY) * bitmap.bytesPerRow + canonicalX * 4
             pixels[offset] = 0; pixels[offset + 1] = 0; pixels[offset + 2] = 0
@@ -215,7 +216,7 @@ struct PrinterProtocol {
                 var value: UInt8 = 0
                 for bit in 0..<8 {
                     let printerX = byteIndex * 8 + bit
-                    let canonicalX = printerY
+                    let canonicalX = canonicalWidth - 1 - printerY
                     let canonicalY = canonicalHeight - 1 - printerX
                     if canonicalPixels[canonicalY * canonicalWidth + canonicalX] { value |= UInt8(1 << (7 - bit)) }
                 }
