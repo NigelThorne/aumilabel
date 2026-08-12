@@ -146,11 +146,11 @@ final class ProtocolTests: XCTestCase {
         ])
     }
 
-    func testPreviewOrientationMapsPrinterCoordinatesByRotatingThenMirroring() {
+    func testPreviewOrientationMapsPrinterCoordinatesByRotatingAnticlockwiseThenMirroring() {
         let first = PrinterProtocol.previewCoordinate(x: 0, y: 0, width: 96, height: 207)
-        XCTAssertEqual(first.x, 206); XCTAssertEqual(first.y, 0)
+        XCTAssertEqual(first.x, 206); XCTAssertEqual(first.y, 95)
         let last = PrinterProtocol.previewCoordinate(x: 95, y: 206, width: 96, height: 207)
-        XCTAssertEqual(last.x, 0); XCTAssertEqual(last.y, 95)
+        XCTAssertEqual(last.x, 0); XCTAssertEqual(last.y, 0)
     }
 
     func testBlackDiagnosticFillsEveryRasterByte() {
