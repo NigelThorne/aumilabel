@@ -97,25 +97,60 @@ struct PrinterProtocol {
         // Reserve a two-dot gap between text lanes. More importantly, size each line to
         // its lane on both axes: emoji fallback glyphs can be far taller than script text.
         let interLineGap: CGFloat = lines.count > 1 ? 2 : 0
-        let availableWide = (CGFloat(widthDots - 8) - interLineGap * CGFloat(lines.count - 1)) / CGFloat(lines.count)
-        for (lineIndex, line) in lines.enumerated() {
+        let contentWide = CGFloat(widthDots - 8) - interLineGap * CGFloat(lines.count - 1)
+        let textColor = inverted ? NSColor.white : NSColor.black
+
+        func fittedToLongAxis(_ line: String) -> (NSAttributedString, NSRect) {
             var size = pointSize
             var font = NSFont(name: fontName, size: size)!
-            var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: inverted ? NSColor.white : NSColor.black]
-            var attributedText = NSAttributedString(string: line, attributes: attributes)
-            var bounds = attributedText.boundingRect(with: NSSize(width: availableLong, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin])
-            while (bounds.width > availableLong || bounds.height > availableWide) && size > 8 {
+            var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
+            var text = NSAttributedString(string: line, attributes: attributes)
+            var bounds = text.boundingRect(with: NSSize(width: availableLong, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin])
+            while bounds.width > availableLong && size > 8 {
                 size -= 1
                 font = NSFont(name: fontName, size: size)!
                 attributes[.font] = font
-                attributedText = NSAttributedString(string: line, attributes: attributes)
+                text = NSAttributedString(string: line, attributes: attributes)
+                bounds = text.boundingRect(with: NSSize(width: availableLong, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin])
+            }
+            return (text, bounds)
+        }
+
+        // First fit every line to the label's long axis. With exactly two lines, the one
+        // that naturally needs less than half the cross-label space gets just that room;
+        // the other line receives the remainder. When neither is short, split evenly.
+        let fittedLines = lines.map(fittedToLongAxis)
+        let laneWidths: [CGFloat]
+        if lines.count == 2 {
+            let half = contentWide / 2
+            let topHeight = fittedLines[0].1.height
+            let bottomHeight = fittedLines[1].1.height
+            if topHeight < half {
+                laneWidths = [contentWide - topHeight, topHeight]
+            } else if bottomHeight < half {
+                laneWidths = [bottomHeight, contentWide - bottomHeight]
+            } else {
+                laneWidths = [half, half]
+            }
+        } else {
+            laneWidths = Array(repeating: contentWide / CGFloat(lines.count), count: lines.count)
+        }
+
+        for (lineIndex, line) in lines.enumerated() {
+            // Lines are drawn into source lanes in reverse order because the label rotates.
+            let physicalLine = lines.count - 1 - lineIndex
+            let availableWide = laneWidths[physicalLine]
+            var (attributedText, bounds) = fittedLines[lineIndex]
+            var size = pointSize
+            while bounds.height > availableWide && size > 8 {
+                size -= 1
+                let font = NSFont(name: fontName, size: size)!
+                attributedText = NSAttributedString(string: line, attributes: [.font: font, .foregroundColor: textColor])
                 bounds = attributedText.boundingRect(with: NSSize(width: availableLong, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin])
             }
             let x = max(2, (CGFloat(heightDots) - bounds.width) / 2)
-            // AppKit's source Y axis becomes the physical across-label axis after rotation.
-            // Reverse indices so the first --text line is physically above the next one.
-            let physicalLine = lines.count - 1 - lineIndex
-            let y = 4 + CGFloat(physicalLine) * (availableWide + interLineGap) + (availableWide - bounds.height) / 2
+            let laneOrigin = 4 + laneWidths.prefix(physicalLine).reduce(0, +) + CGFloat(physicalLine) * interLineGap
+            let y = laneOrigin + (availableWide - bounds.height) / 2
             attributedText.draw(at: NSPoint(x: x, y: y))
         }
         context.flushGraphics()

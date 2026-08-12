@@ -52,7 +52,7 @@ final class ProtocolTests: XCTestCase {
                 return byte & UInt8(1 << (7 - column % 8)) != 0
             }
         }
-        XCTAssertFalse(columnHasInk(47), "the centre divider must remain blank between text lines")
+        XCTAssertFalse(columnHasInk(45), "the divider between the intentionally larger lower lane and top line must remain blank")
     }
 
     func testExpandsEmojiShortcodesBeforeRendering() {
