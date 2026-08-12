@@ -123,7 +123,7 @@ struct PrinterProtocol {
         let availableLong = CGFloat(heightDots - 12)
         // Reserve a two-dot gap between text lanes. More importantly, size each line to
         // its lane on both axes: emoji fallback glyphs can be far taller than script text.
-        let interLineGap: CGFloat = lines.count > 1 ? 2 : 0
+        let interLineGap: CGFloat = lines.count > 1 ? 1 : 0
         let contentWide = CGFloat(widthDots - 8) - interLineGap * CGFloat(lines.count - 1)
         let textColor = inverted ? NSColor.white : NSColor.black
 
