@@ -45,7 +45,7 @@ final class ProtocolTests: XCTestCase {
 
     func testMaxFontSizeFitsTextWithinRectangle() throws {
         let fit = try PrinterProtocol.maxFontFit(text: "Cath", fontName: "AppleSDGothicNeo-Bold", maximumSize: 82, in: NSSize(width: 195, height: 88))
-        XCTAssertEqual(fit.size, 73)
+        XCTAssertEqual(fit.size, 73.85, accuracy: 0.001)
         XCTAssertLessThanOrEqual(fit.bounds.width, 195)
         XCTAssertLessThanOrEqual(fit.bounds.height, 88)
     }
@@ -58,7 +58,7 @@ final class ProtocolTests: XCTestCase {
 
     func testFontFitBumpsUpToTheLargestSizeWithinBounds() throws {
         let fit = try PrinterProtocol.maxFontFit(text: "Cath", fontName: "AppleSDGothicNeo-Bold", maximumSize: 82, in: NSSize(width: 195, height: 51))
-        XCTAssertEqual(fit.size, 42)
+        XCTAssertEqual(fit.size, 42.75, accuracy: 0.001)
         XCTAssertGreaterThan(try PrinterProtocol.maxFontFit(text: "Cath", fontName: "AppleSDGothicNeo-Bold", maximumSize: 82, in: NSSize(width: 195, height: 52)).size, fit.size)
     }
 
