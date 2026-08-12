@@ -239,14 +239,14 @@ final class PrinterProbe: NSObject, IOBluetoothRFCOMMChannelDelegate {
 enum CLICommand: Equatable {
     static let defaultAddress = ProcessInfo.processInfo.environment["AUMILABEL_ADDRESS"] ?? ""
     case scan
-    case status(address: String)
-    case connect(address: String)
-    case calibrate(address: String)
+    case status(address: String, device: String?)
+    case connect(address: String, device: String?)
+    case calibrate(address: String, device: String?)
     case fonts(filter: String?)
-    case printBlack(address: String)
-    case printOverscan(address: String)
-    case printQR(value: String, address: String)
-    case printText(lines: [String], font: String, size: Double, inverted: Bool, address: String)
+    case printBlack(address: String, device: String?)
+    case printOverscan(address: String, device: String?)
+    case printQR(value: String, address: String, device: String?)
+    case printText(lines: [String], font: String, size: Double, inverted: Bool, address: String, device: String?)
 
     static func parse(_ arguments: [String]) throws -> CLICommand {
         guard let action = arguments.first else { throw CLIError.usage("a command is required") }
@@ -267,42 +267,43 @@ enum CLICommand: Equatable {
             index += 2
         }
         let address = values["--address"] ?? defaultAddress
-        func requireAddress() throws -> String {
-            guard !address.isEmpty else { throw CLIError.usage("--address is required; run `aumilabel scan` first, then optionally export AUMILABEL_ADDRESS") }
-            return address
+        let device = values["--device"]
+        func requireTarget() throws -> (String, String?) {
+            guard !address.isEmpty || device != nil else { throw CLIError.usage("--device or --address is required; run `aumilabel scan` first") }
+            return (address, device)
         }
         switch action {
         case "scan":
             guard values.isEmpty, textLines.isEmpty else { throw CLIError.usage("scan accepts no flags") }
             return .scan
         case "status":
-            guard values.keys.allSatisfy({ $0 == "--address" }) else { throw CLIError.usage("status accepts only --address") }
-            return .status(address: try requireAddress())
+            guard values.keys.allSatisfy({ ["--address", "--device"].contains($0) }) else { throw CLIError.usage("status accepts --address or --device") }
+            let target = try requireTarget(); return .status(address: target.0, device: target.1)
         case "connect":
-            guard values.keys.allSatisfy({ $0 == "--address" }) else { throw CLIError.usage("connect accepts only --address") }
-            return .connect(address: try requireAddress())
+            guard values.keys.allSatisfy({ ["--address", "--device"].contains($0) }) else { throw CLIError.usage("connect accepts --address or --device") }
+            let target = try requireTarget(); return .connect(address: target.0, device: target.1)
         case "calibrate":
-            guard values.keys.allSatisfy({ $0 == "--address" }) else { throw CLIError.usage("calibrate accepts only --address") }
-            return .calibrate(address: try requireAddress())
+            guard values.keys.allSatisfy({ ["--address", "--device"].contains($0) }) else { throw CLIError.usage("calibrate accepts --address or --device") }
+            let target = try requireTarget(); return .calibrate(address: target.0, device: target.1)
         case "fonts":
             guard values.keys.allSatisfy({ $0 == "--filter" }) else { throw CLIError.usage("fonts accepts only --filter") }
             return .fonts(filter: values["--filter"])
         case "print-black":
-            guard values.keys.allSatisfy({ $0 == "--address" }), textLines.isEmpty else { throw CLIError.usage("print-black accepts only --address") }
-            return .printBlack(address: try requireAddress())
+            guard values.keys.allSatisfy({ ["--address", "--device"].contains($0) }), textLines.isEmpty else { throw CLIError.usage("print-black accepts --address or --device") }
+            let target = try requireTarget(); return .printBlack(address: target.0, device: target.1)
         case "print-overscan":
-            guard values.keys.allSatisfy({ $0 == "--address" }), textLines.isEmpty else { throw CLIError.usage("print-overscan accepts only --address") }
-            return .printOverscan(address: try requireAddress())
+            guard values.keys.allSatisfy({ ["--address", "--device"].contains($0) }), textLines.isEmpty else { throw CLIError.usage("print-overscan accepts --address or --device") }
+            let target = try requireTarget(); return .printOverscan(address: target.0, device: target.1)
         case "print": 
-            guard values.keys.allSatisfy({ ["--font", "--size", "--address", "--invert", "--qr"].contains($0) }) else { throw CLIError.usage("print accepts --text, --qr, --font, --size, --invert, --address") }
+            guard values.keys.allSatisfy({ ["--font", "--size", "--address", "--device", "--invert", "--qr"].contains($0) }) else { throw CLIError.usage("print accepts --text, --qr, --font, --size, --invert, --address") }
             if let qr = values["--qr"] {
                 guard textLines.isEmpty, !qr.isEmpty else { throw CLIError.usage("--qr cannot be combined with --text and must not be empty") }
-                return .printQR(value: qr, address: try requireAddress())
+                let target = try requireTarget(); return .printQR(value: qr, address: target.0, device: target.1)
             }
             guard !textLines.isEmpty, textLines.allSatisfy({ !$0.isEmpty }) else { throw CLIError.usage("print requires --text TEXT") }
             let size = Double(values["--size"] ?? "82")
             guard let size, size > 0 else { throw CLIError.usage("--size must be a positive number") }
-            return .printText(lines: textLines, font: values["--font"] ?? "SnellRoundhand", size: size, inverted: values["--invert"] == "true", address: try requireAddress())
+            let target = try requireTarget(); return .printText(lines: textLines, font: values["--font"] ?? "SnellRoundhand", size: size, inverted: values["--invert"] == "true", address: target.0, device: target.1)
         default: throw CLIError.usage("unknown command: \(action)")
         }
     }
@@ -339,6 +340,21 @@ final class PrinterScanner: NSObject, IOBluetoothDeviceInquiryDelegate {
     }
     func deviceInquiryComplete(_ sender: IOBluetoothDeviceInquiry, error: IOReturn, aborted: Bool) { CFRunLoopStop(CFRunLoopGetMain()) }
     func scan() throws { guard inquiry.start() == kIOReturnSuccess else { throw CLIError.usage("could not start Bluetooth scan") }; CFRunLoopRun() }
+    static func resolve(_ deviceName: String) throws -> String {
+        final class Finder: NSObject, IOBluetoothDeviceInquiryDelegate {
+            let inquiry = IOBluetoothDeviceInquiry(); let wanted: String; var address: String?
+            init(_ wanted: String) { self.wanted = wanted; super.init(); inquiry.delegate = self; inquiry.inquiryLength = 10; inquiry.updateNewDeviceNames = true }
+            func deviceInquiryDeviceFound(_ sender: IOBluetoothDeviceInquiry, device: IOBluetoothDevice) {
+                if device.name?.caseInsensitiveCompare(wanted) == .orderedSame { address = device.addressString; sender.stop() }
+            }
+            func deviceInquiryComplete(_ sender: IOBluetoothDeviceInquiry, error: IOReturn, aborted: Bool) { CFRunLoopStop(CFRunLoopGetMain()) }
+        }
+        let finder = Finder(deviceName)
+        guard finder.inquiry.start() == kIOReturnSuccess else { throw CLIError.usage("could not start Bluetooth scan") }
+        CFRunLoopRun()
+        guard let address = finder.address else { throw CLIError.usage("device not found: \(deviceName); put it in pairing mode and run `aumilabel scan`") }
+        return address
+    }
 }
 
 func printHelp() {
@@ -351,7 +367,9 @@ if rawArguments.isEmpty || rawArguments == ["--help"] {
     exit(0)
 }
 do {
-    switch try CLICommand.parse(rawArguments) {
+    let command = try CLICommand.parse(rawArguments)
+    func resolvedAddress(_ address: String, _ device: String?) throws -> String { !address.isEmpty ? address : try PrinterScanner.resolve(device!) }
+    switch command {
     case .scan:
         try PrinterScanner().scan()
     case .fonts(let filter):
@@ -359,31 +377,31 @@ do {
             filter.map { fontName.localizedCaseInsensitiveContains($0) } ?? true
         }.sorted()
         print("fonts: \(matches.joined(separator: ", "))")
-    case .status(let address):
-        let probe = PrinterProbe(); try probe.connect(address: address); try probe.sendObservedProbes()
+    case .status(let address, let device):
+        let probe = PrinterProbe(); try probe.connect(address: resolvedAddress(address, device)); try probe.sendObservedProbes()
         RunLoop.current.run(until: Date().addingTimeInterval(2)); probe.close()
-    case .connect(let address):
-        let probe = PrinterProbe(); try probe.connect(address: address); try probe.sendObservedProbes()
+    case .connect(let address, let device):
+        let probe = PrinterProbe(); try probe.connect(address: resolvedAddress(address, device)); try probe.sendObservedProbes()
         print("status: connected\nhelp: connection remains open; press Ctrl-C to disconnect")
         RunLoop.current.run()
         probe.close()
-    case .calibrate(let address):
-        let probe = PrinterProbe(); try probe.connect(address: address); try probe.calibrate()
+    case .calibrate(let address, let device):
+        let probe = PrinterProbe(); try probe.connect(address: resolvedAddress(address, device)); try probe.calibrate()
         RunLoop.current.run(until: Date().addingTimeInterval(5)); probe.close()
-    case .printBlack(let address):
-        let probe = PrinterProbe(); try probe.connect(address: address); try probe.printBlackDiagnostic()
+    case .printBlack(let address, let device):
+        let probe = PrinterProbe(); try probe.connect(address: resolvedAddress(address, device)); try probe.printBlackDiagnostic()
         RunLoop.current.run(until: Date().addingTimeInterval(5)); probe.close()
-    case .printOverscan(let address):
-        let probe = PrinterProbe(); try probe.connect(address: address); try probe.printOverscanDiagnostic()
+    case .printOverscan(let address, let device):
+        let probe = PrinterProbe(); try probe.connect(address: resolvedAddress(address, device)); try probe.printOverscanDiagnostic()
         RunLoop.current.run(until: Date().addingTimeInterval(5)); probe.close()
-    case .printQR(let value, let address):
+    case .printQR(let value, let address, let device):
         let job = try PrinterProtocol.qrLabel(value: value)
-        let probe = PrinterProbe(); try probe.connect(address: address)
+        let probe = PrinterProbe(); try probe.connect(address: resolvedAddress(address, device))
         try probe.sendPrint(job: job, description: "QR code")
         RunLoop.current.run(until: Date().addingTimeInterval(5)); probe.close()
-    case .printText(let lines, let font, let size, let inverted, let address):
+    case .printText(let lines, let font, let size, let inverted, let address, let device):
         let job = try PrinterProtocol.textLabel(lines: lines, fontName: font, pointSize: CGFloat(size), inverted: inverted)
-        let probe = PrinterProbe(); try probe.connect(address: address)
+        let probe = PrinterProbe(); try probe.connect(address: resolvedAddress(address, device))
         try probe.sendPrint(job: job, description: "\(lines.joined(separator: " / ")) in \(font)")
         RunLoop.current.run(until: Date().addingTimeInterval(5)); probe.close()
     }

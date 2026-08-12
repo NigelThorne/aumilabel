@@ -20,25 +20,28 @@ Ensure `~/.local/bin` is on your `PATH`.
 
 ## Use
 
-Find your printer first, then use its address in commands (or set it once):
+Target a printer by its advertised name (the easiest option), by Bluetooth address, or by a saved environment variable:
 
 ```bash
+aumilabel print --device AL-1234 --text "Hello"
 aumilabel scan
-export AUMILABEL_ADDRESS="25-00-02-00-26-c4" # replace with your printer's address
+export AUMILABEL_ADDRESS="25-00-02-00-12-34" # replace with your printer's address
 ```
+
+`--address` takes precedence over `--device`, which takes precedence over `AUMILABEL_ADDRESS`. Put a printer in pairing mode before using `--device`; the CLI scans for its exact advertised name.
 
 Load a new roll or fix alignment:
 
 ```bash
-aumilabel calibrate
+aumilabel calibrate --device AL-1234
 ```
 
 Print text using any installed macOS font:
 
 ```bash
-aumilabel print --text "Hello" --font SnellRoundhand
-aumilabel print --text "Nigel loves you" --text "Cath" --font SignPainter-HouseScript
-aumilabel print --text "Hello" --font SnellRoundhand --invert
+aumilabel print --device AL-1234 --text "Hello" --font SnellRoundhand
+aumilabel print --device AL-1234 --text "Nigel loves you" --text "Cath" --font SignPainter-HouseScript
+aumilabel print --device AL-1234 --text "Hello" --font SnellRoundhand --invert
 ```
 
 Long text automatically shrinks to fit. Repeating `--text` produces multiple lines; the first is above the next.
@@ -46,7 +49,7 @@ Long text automatically shrinks to fit. Repeating `--text` produces multiple lin
 Print a QR code:
 
 ```bash
-aumilabel print --qr "https://example.com"
+aumilabel print --device AL-1234 --qr "https://example.com"
 ```
 
 Other commands:
