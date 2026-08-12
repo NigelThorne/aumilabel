@@ -179,7 +179,8 @@ struct PrinterProtocol {
             let byte = job.raster[8 + y * bytesPerRow + x / 8]
             guard byte & UInt8(1 << (7 - x % 8)) != 0 else { continue }
             let preview = previewCoordinate(x: x, y: y, width: job.widthDots, height: job.heightDots)
-            let offset = (job.widthDots - 1 - preview.y) * bitmap.bytesPerRow + preview.x * 4
+            // previewCoordinate already expresses the complete display transform.
+            let offset = preview.y * bitmap.bytesPerRow + preview.x * 4
             pixels[offset] = 0; pixels[offset + 1] = 0; pixels[offset + 2] = 0
         }}
         guard let data = bitmap.representation(using: .png, properties: [:]) else { throw CLIError.usage("could not encode preview PNG") }
