@@ -55,6 +55,12 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(PrinterProtocol.expandEmojiShortcodes(":tada: :+1: :green_heart:"), "🎉 👍 💚")
     }
 
+    func testEmojiOnlyTextRendersInkWithScriptFont() throws {
+        let empty = try PrinterProtocol.textLabel(lines: [""], fontName: "SnellRoundhand", pointSize: 82)
+        let emoji = try PrinterProtocol.textLabel(lines: [":tada:"], fontName: "SnellRoundhand", pointSize: 82)
+        XCTAssertGreaterThan(PrinterProtocol.inkRows(in: emoji).count, PrinterProtocol.inkRows(in: empty).count)
+    }
+
     func testParsesDeviceNameForPrinterLookup() throws {
         XCTAssertEqual(
             try CLICommand.parse(["print", "--text", "Hello", "--device", "AL-1234"]),

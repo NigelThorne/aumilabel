@@ -87,7 +87,7 @@ struct PrinterProtocol {
         }
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
-        (inverted ? NSColor.black : NSColor.white).setFill()
+        NSColor.clear.setFill()
         NSBezierPath.fill(NSRect(x: 0, y: 0, width: heightDots, height: widthDots))
         // Fit each line independently along the 30 mm axis; multiple --text flags split the 15 mm width.
         let availableLong = CGFloat(heightDots - 8)
@@ -119,7 +119,10 @@ struct PrinterProtocol {
             for printerX in 0..<widthDots {
                 // Source canvas is long × wide. Map it clockwise onto printer width × long.
                 guard let color = bitmap.colorAt(x: printerY, y: widthDots - 1 - printerX) else { continue }
-                pixels[printerY * widthDots + printerX] = color.brightnessComponent < 0.5
+                // Emoji are rendered by Apple Color Emoji and retain their colour; use glyph alpha
+                // rather than brightness so yellow/green symbols survive monochrome conversion.
+                let glyphPixel = color.alphaComponent > 0.5
+                pixels[printerY * widthDots + printerX] = inverted ? !glyphPixel : glyphPixel
             }
         }
         return makeRasterJob(widthDots: widthDots, heightDots: heightDots, pixels: pixels)
