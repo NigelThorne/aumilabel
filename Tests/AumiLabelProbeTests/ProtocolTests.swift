@@ -56,6 +56,12 @@ final class ProtocolTests: XCTestCase {
         XCTAssertLessThan(top.size, bottom.size)
     }
 
+    func testFontFitBumpsUpToTheLargestSizeWithinBounds() throws {
+        let fit = try PrinterProtocol.maxFontFit(text: "Cath", fontName: "AppleSDGothicNeo-Bold", maximumSize: 82, in: NSSize(width: 195, height: 51))
+        XCTAssertEqual(fit.size, 42)
+        XCTAssertGreaterThan(try PrinterProtocol.maxFontFit(text: "Cath", fontName: "AppleSDGothicNeo-Bold", maximumSize: 82, in: NSSize(width: 195, height: 52)).size, fit.size)
+    }
+
     func testTwoShortLinesSplitTheLabelEvenly() {
         XCTAssertEqual(PrinterProtocol.twoLineLaneWidths(contentWidth: 86, firstHeight: 20, secondHeight: 25), [43, 43])
     }
