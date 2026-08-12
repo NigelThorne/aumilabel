@@ -172,11 +172,14 @@ struct PrinterProtocol {
 
     static func writePreviewPNG(of job: PrintJob, to output: String) throws {
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: job.widthDots, pixelsHigh: job.heightDots, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        guard let pixels = bitmap.bitmapData else { throw CLIError.usage("could not allocate preview bitmap") }
+        memset(pixels, 0xFF, bitmap.bytesPerRow * bitmap.pixelsHigh)
         let bytesPerRow = job.widthDots / 8
         for y in 0..<job.heightDots { for x in 0..<job.widthDots {
             let byte = job.raster[8 + y * bytesPerRow + x / 8]
-            let black = byte & UInt8(1 << (7 - x % 8)) != 0
-            bitmap.setColor(black ? .black : .white, atX: x, y: job.heightDots - 1 - y)
+            guard byte & UInt8(1 << (7 - x % 8)) != 0 else { continue }
+            let offset = (job.heightDots - 1 - y) * bitmap.bytesPerRow + x * 4
+            pixels[offset] = 0; pixels[offset + 1] = 0; pixels[offset + 2] = 0
         }}
         guard let data = bitmap.representation(using: .png, properties: [:]) else { throw CLIError.usage("could not encode preview PNG") }
         try data.write(to: URL(fileURLWithPath: output))
