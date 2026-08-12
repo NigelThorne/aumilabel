@@ -50,6 +50,12 @@ final class ProtocolTests: XCTestCase {
         XCTAssertLessThanOrEqual(fit.bounds.height, 88)
     }
 
+    func testEachLineGetsItsOwnFittedFontSize() throws {
+        let top = try PrinterProtocol.maxFontFit(text: "❤️ Love you ❤️", fontName: "AppleSDGothicNeo-Bold", maximumSize: 82, in: NSSize(width: 195, height: 88))
+        let bottom = try PrinterProtocol.maxFontFit(text: "Cath", fontName: "AppleSDGothicNeo-Bold", maximumSize: 82, in: NSSize(width: 195, height: 88))
+        XCTAssertLessThan(top.size, bottom.size)
+    }
+
     func testTwoShortLinesSplitTheLabelEvenly() {
         XCTAssertEqual(PrinterProtocol.twoLineLaneWidths(contentWidth: 86, firstHeight: 20, secondHeight: 25), [43, 43])
     }
@@ -67,7 +73,7 @@ final class ProtocolTests: XCTestCase {
                 return byte & UInt8(1 << (7 - column % 8)) != 0
             }
         }
-        XCTAssertFalse(columnHasInk(45), "the divider between the intentionally larger lower lane and top line must remain blank")
+        XCTAssertFalse(columnHasInk(56), "the divider between the intentionally larger lower lane and top line must remain blank")
     }
 
     func testExpandsEmojiShortcodesBeforeRendering() {

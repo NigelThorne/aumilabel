@@ -38,12 +38,13 @@ struct PrinterProtocol {
         guard NSFont(name: fontName, size: maximumSize) != nil else { throw CLIError.unsupportedFont(fontName) }
         for size in stride(from: maximumSize, through: 8, by: -1) {
             let attributed = NSAttributedString(string: text, attributes: [.font: NSFont(name: fontName, size: size)!, .foregroundColor: color])
-            let bounds = attributed.boundingRect(with: rectangle, options: [.usesLineFragmentOrigin]).integral
+            // A CLI --text is one physical line: measure its natural (unwrapped) extent.
+            let bounds = attributed.boundingRect(with: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude), options: [.usesLineFragmentOrigin]).integral
             if bounds.width <= rectangle.width && bounds.height <= rectangle.height { return FontFit(text: attributed, bounds: bounds, size: size) }
         }
         let font = NSFont(name: fontName, size: 8)!
         let text = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
-        return FontFit(text: text, bounds: text.boundingRect(with: rectangle, options: [.usesLineFragmentOrigin]).integral, size: 8)
+        return FontFit(text: text, bounds: text.boundingRect(with: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude), options: [.usesLineFragmentOrigin]).integral, size: 8)
     }
 
     static func twoLineLaneWidths(contentWidth: CGFloat, firstHeight: CGFloat, secondHeight: CGFloat) -> [CGFloat] {
@@ -139,7 +140,10 @@ struct PrinterProtocol {
             let x = max(2, (CGFloat(heightDots) - fit.bounds.width) / 2)
             let laneOrigin = 4 + laneWidths.prefix(physicalLine).reduce(0, +) + CGFloat(physicalLine) * interLineGap
             let y = laneOrigin + (availableWide - fit.bounds.height) / 2
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(rect: NSRect(x: 4, y: laneOrigin, width: CGFloat(heightDots - 8), height: availableWide)).addClip()
             fit.text.draw(at: NSPoint(x: x, y: y))
+            NSGraphicsContext.restoreGraphicsState()
         }
         context.flushGraphics()
         NSGraphicsContext.restoreGraphicsState()
