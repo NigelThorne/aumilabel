@@ -79,7 +79,7 @@ final class ProtocolTests: XCTestCase {
                 return byte & UInt8(1 << (7 - column % 8)) != 0
             }
         }
-        XCTAssertFalse(columnHasInk(56), "the divider between the intentionally larger lower lane and top line must remain blank")
+        XCTAssertFalse(columnHasInk(48), "the divider between the intentionally larger lower lane and top line must remain blank")
     }
 
     func testExpandsEmojiShortcodesBeforeRendering() {
@@ -146,11 +146,11 @@ final class ProtocolTests: XCTestCase {
         ])
     }
 
-    func testPreviewOrientationMapsToUprightLandscapeCoordinates() {
-        let first = PrinterProtocol.previewCoordinate(x: 0, y: 0, width: 96, height: 207)
-        XCTAssertEqual(first.x, 0); XCTAssertEqual(first.y, 95)
-        let last = PrinterProtocol.previewCoordinate(x: 95, y: 206, width: 96, height: 207)
-        XCTAssertEqual(last.x, 206); XCTAssertEqual(last.y, 0)
+    func testCanonicalCanvasMapsDirectlyToPrinterRaster() {
+        let first = PrinterProtocol.canonicalToPrinterCoordinate(x: 0, y: 0)
+        XCTAssertEqual(first.x, 95); XCTAssertEqual(first.y, 0)
+        let last = PrinterProtocol.canonicalToPrinterCoordinate(x: 206, y: 95)
+        XCTAssertEqual(last.x, 0); XCTAssertEqual(last.y, 206)
     }
 
     func testBlackDiagnosticFillsEveryRasterByte() {
@@ -160,8 +160,8 @@ final class ProtocolTests: XCTestCase {
 
     func testOverscanDiagnosticExceedsTheKnownAppCanvas() {
         let job = PrinterProtocol.overscanDiagnosticLabel
-        XCTAssertEqual(job.widthDots, 120)
-        XCTAssertEqual(job.heightDots, 250)
+        XCTAssertEqual(job.widthDots, 96)
+        XCTAssertEqual(job.heightDots, 207)
         XCTAssertTrue(job.raster.dropFirst(8).allSatisfy { $0 == 0xFF })
     }
 

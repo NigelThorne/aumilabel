@@ -19,6 +19,15 @@ struct PrintJob {
 }
 
 struct PrinterProtocol {
+    // All label design is expressed in this normal orientation: 30 mm wide × 15 mm high.
+    static let canonicalWidth = 207
+    static let canonicalHeight = 96
+
+    static func canonicalToPrinterCoordinate(x: Int, y: Int) -> (x: Int, y: Int) {
+        // Clockwise conversion to the printer's 96×207 raster orientation.
+        (canonicalHeight - 1 - y, x)
+    }
+
     static let observedProbeCommands: [Data] = [
         Data([0x1D, 0x67, 0x39]),
         Data([0x1E, 0x47, 0x03]),
@@ -60,10 +69,10 @@ struct PrinterProtocol {
     }
 
     /// Dimensions sent by the captured AumiLabel print: 96 × 207 dots.
-    static let testLabel15x30mm: PrintJob = makeTestLabel(widthDots: 96, heightDots: 207)
-    static let blackDiagnosticLabel: PrintJob = makeRasterJob(widthDots: 96, heightDots: 207, pixels: Array(repeating: true, count: 96 * 207))
-    static let overscanDiagnosticLabel: PrintJob = makeRasterJob(widthDots: 120, heightDots: 250, pixels: Array(repeating: true, count: 120 * 250))
-    static let cursiveHelloLabel15x30mm: PrintJob = makeCursiveLabel(lines: ["Hello"], fontName: "SnellRoundhand", pointSize: 82, widthDots: 96, heightDots: 207)
+    static let testLabel15x30mm: PrintJob = makeTestLabel()
+    static let blackDiagnosticLabel: PrintJob = makeRasterJob(canonicalPixels: Array(repeating: true, count: canonicalWidth * canonicalHeight))
+    static let overscanDiagnosticLabel: PrintJob = blackDiagnosticLabel
+    static let cursiveHelloLabel15x30mm: PrintJob = makeCursiveLabel(lines: ["Hello"], fontName: "SnellRoundhand", pointSize: 82)
 
     static func qrLabel(value: String) throws -> PrintJob {
         guard !value.isEmpty else { throw CLIError.usage("--qr must not be empty") }
@@ -80,18 +89,15 @@ struct PrinterProtocol {
             toBitmap: &rgba, rowBytes: side * 4, bounds: CGRect(x: 0, y: 0, width: side, height: side),
             format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB()
         )
-        var pixels = Array(repeating: false, count: 96 * 207)
-        let sourceOffsetX = (207 - side) / 2
-        let sourceOffsetY = (96 - side) / 2
+        var canonicalPixels = Array(repeating: false, count: canonicalWidth * canonicalHeight)
+        let sourceOffsetX = (canonicalWidth - side) / 2
+        let sourceOffsetY = (canonicalHeight - side) / 2
         for pixelY in 0..<side {
             for pixelX in 0..<side where rgba[(pixelY * side + pixelX) * 4] < 128 {
-                // Rotate source (207×96) clockwise into printer (96×207).
-                let printerX = 96 - 1 - (sourceOffsetY + pixelY)
-                let printerY = sourceOffsetX + pixelX
-                pixels[printerY * 96 + printerX] = true
+                canonicalPixels[(sourceOffsetY + pixelY) * canonicalWidth + sourceOffsetX + pixelX] = true
             }
         }
-        return makeRasterJob(widthDots: 96, heightDots: 207, pixels: pixels)
+        return makeRasterJob(canonicalPixels: canonicalPixels)
     }
 
     static func textLabel(text: String, fontName: String, pointSize: CGFloat) throws -> PrintJob {
@@ -100,13 +106,13 @@ struct PrinterProtocol {
 
     static func textLabel(lines: [String], fontName: String, pointSize: CGFloat, inverted: Bool = false) throws -> PrintJob {
         guard NSFont(name: fontName, size: pointSize) != nil else { throw CLIError.unsupportedFont(fontName) }
-        return makeCursiveLabel(lines: lines.map(expandEmojiShortcodes), fontName: fontName, pointSize: pointSize, inverted: inverted, widthDots: 96, heightDots: 207)
+        return makeCursiveLabel(lines: lines.map(expandEmojiShortcodes), fontName: fontName, pointSize: pointSize, inverted: inverted)
     }
 
-    private static func makeCursiveLabel(lines: [String], fontName: String, pointSize: CGFloat, inverted: Bool = false, widthDots: Int, heightDots: Int) -> PrintJob {
+    private static func makeCursiveLabel(lines: [String], fontName: String, pointSize: CGFloat, inverted: Bool = false) -> PrintJob {
         // Render at native printer resolution using macOS's Snell Roundhand script face.
         guard let bitmap = NSBitmapImageRep(
-            bitmapDataPlanes: nil, pixelsWide: heightDots, pixelsHigh: widthDots,
+            bitmapDataPlanes: nil, pixelsWide: canonicalWidth, pixelsHigh: canonicalHeight,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
         ), let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
@@ -115,16 +121,16 @@ struct PrinterProtocol {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
         NSColor.clear.setFill()
-        NSBezierPath.fill(NSRect(x: 0, y: 0, width: heightDots, height: widthDots))
+        NSBezierPath.fill(NSRect(x: 0, y: 0, width: canonicalWidth, height: canonicalHeight))
         // Font metrics can underreport script glyph overhang. Clip to the printable inset
         // so no long-text stroke can escape the label canvas.
-        NSBezierPath(rect: NSRect(x: 4, y: 4, width: heightDots - 8, height: widthDots - 8)).addClip()
+        NSBezierPath(rect: NSRect(x: 4, y: 4, width: CGFloat(canonicalWidth - 8), height: CGFloat(canonicalHeight - 8))).addClip()
         // Fit each line independently along the 30 mm axis; multiple --text flags split the 15 mm width.
-        let availableLong = CGFloat(heightDots - 12)
+        let availableLong = CGFloat(canonicalWidth - 12)
         // Reserve a two-dot gap between text lanes. More importantly, size each line to
         // its lane on both axes: emoji fallback glyphs can be far taller than script text.
         let interLineGap: CGFloat = lines.count > 1 ? 1 : 0
-        let contentWide = CGFloat(widthDots - 8) - interLineGap * CGFloat(lines.count - 1)
+        let contentWide = CGFloat(canonicalHeight - 8) - interLineGap * CGFloat(lines.count - 1)
         let textColor = inverted ? NSColor.white : NSColor.black
 
         let fullLineRectangle = NSSize(width: availableLong, height: contentWide)
@@ -135,53 +141,45 @@ struct PrinterProtocol {
             : Array(repeating: contentWide / CGFloat(lines.count), count: lines.count)
 
         for (lineIndex, line) in lines.enumerated() {
-            // Lines are drawn into source lanes in reverse order because the label rotates.
-            let physicalLine = lines.count - 1 - lineIndex
+            let physicalLine = lineIndex
             let availableWide = laneWidths[physicalLine]
             // Re-fit against the chosen lane; this is the sole source of font sizing.
             let fit = try! maxFontFit(text: line, fontName: fontName, maximumSize: pointSize, in: NSSize(width: availableLong, height: availableWide), color: textColor)
-            let x = max(2, (CGFloat(heightDots) - fit.bounds.width) / 2)
-            let laneOrigin = 4 + laneWidths.prefix(physicalLine).reduce(0, +) + CGFloat(physicalLine) * interLineGap
+            let x = max(2, (CGFloat(canonicalWidth) - fit.bounds.width) / 2)
+            let canonicalLaneOrigin = 4 + laneWidths.prefix(physicalLine).reduce(0, +) + CGFloat(physicalLine) * interLineGap
+            // Layout coordinates are conventional y-down. AppKit draws y-up, so convert
+            // the allocated canonical lane only at this rendering boundary.
+            let laneOrigin = CGFloat(canonicalHeight) - canonicalLaneOrigin - availableWide
             let y = laneOrigin + (availableWide - fit.bounds.height) / 2
             NSGraphicsContext.saveGraphicsState()
-            NSBezierPath(rect: NSRect(x: 4, y: laneOrigin, width: CGFloat(heightDots - 8), height: availableWide)).addClip()
+            NSBezierPath(rect: NSRect(x: 4, y: laneOrigin, width: CGFloat(canonicalWidth - 8), height: availableWide)).addClip()
             fit.text.draw(at: NSPoint(x: x, y: y))
             NSGraphicsContext.restoreGraphicsState()
         }
         context.flushGraphics()
         NSGraphicsContext.restoreGraphicsState()
 
-        var pixels = Array(repeating: false, count: widthDots * heightDots)
-        for printerY in 0..<heightDots {
-            for printerX in 0..<widthDots {
-                // Source canvas is long × wide. Map it clockwise onto printer width × long.
-                guard let color = bitmap.colorAt(x: printerY, y: widthDots - 1 - printerX) else { continue }
-                // Emoji are rendered by Apple Color Emoji and retain their colour; use glyph alpha
-                // rather than brightness so yellow/green symbols survive monochrome conversion.
-                let glyphPixel = color.alphaComponent > 0.5
-                pixels[printerY * widthDots + printerX] = inverted ? !glyphPixel : glyphPixel
-            }
-        }
-        return makeRasterJob(widthDots: widthDots, heightDots: heightDots, pixels: pixels)
-    }
-
-    static func previewCoordinate(x: Int, y: Int, width: Int, height: Int) -> (x: Int, y: Int) {
-        // The PNG bitmap row convention supplies the final horizontal mirror. This
-        // coordinate map is the corresponding 90° anticlockwise rotation.
-        (y, width - 1 - x)
+        var canonicalPixels = Array(repeating: false, count: canonicalWidth * canonicalHeight)
+        for y in 0..<canonicalHeight { for x in 0..<canonicalWidth {
+            guard let color = bitmap.colorAt(x: x, y: canonicalHeight - 1 - y) else { continue }
+            let glyphPixel = color.alphaComponent > 0.5
+            canonicalPixels[y * canonicalWidth + x] = inverted ? !glyphPixel : glyphPixel
+        }}
+        return makeRasterJob(canonicalPixels: canonicalPixels)
     }
 
     static func writePreviewPNG(of job: PrintJob, to output: String) throws {
-        let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: job.heightDots, pixelsHigh: job.widthDots, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: canonicalWidth, pixelsHigh: canonicalHeight, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         guard let pixels = bitmap.bitmapData else { throw CLIError.usage("could not allocate preview bitmap") }
         memset(pixels, 0xFF, bitmap.bytesPerRow * bitmap.pixelsHigh)
         let bytesPerRow = job.widthDots / 8
         for y in 0..<job.heightDots { for x in 0..<job.widthDots {
             let byte = job.raster[8 + y * bytesPerRow + x / 8]
             guard byte & UInt8(1 << (7 - x % 8)) != 0 else { continue }
-            let preview = previewCoordinate(x: x, y: y, width: job.widthDots, height: job.heightDots)
-            // previewCoordinate already expresses the complete display transform.
-            let offset = preview.y * bitmap.bytesPerRow + preview.x * 4
+            // Decode the printer raster through the same canonical mapping used to encode it.
+            let canonicalX = y
+            let canonicalY = canonicalHeight - 1 - x
+            let offset = (canonicalHeight - 1 - canonicalY) * bitmap.bytesPerRow + canonicalX * 4
             pixels[offset] = 0; pixels[offset + 1] = 0; pixels[offset + 2] = 0
         }}
         guard let data = bitmap.representation(using: .png, properties: [:]) else { throw CLIError.usage("could not encode preview PNG") }
@@ -195,38 +193,36 @@ struct PrinterProtocol {
         }
     }
 
-    private static func makeTestLabel(widthDots: Int, heightDots: Int) -> PrintJob {
-        var pixels = Array(repeating: false, count: widthDots * heightDots)
+    private static func makeTestLabel() -> PrintJob {
+        var pixels = Array(repeating: false, count: canonicalWidth * canonicalHeight)
         func setPixel(_ x: Int, _ y: Int) {
-            guard x >= 0, x < widthDots, y >= 0, y < heightDots else { return }
-            pixels[y * widthDots + x] = true
+            guard x >= 0, x < canonicalWidth, y >= 0, y < canonicalHeight else { return }
+            pixels[y * canonicalWidth + x] = true
         }
-
-        // A black border and four distinctive corner blocks make orientation obvious.
-        for x in 2..<(widthDots - 2) { setPixel(x, 2); setPixel(x, heightDots - 3) }
-        for y in 2..<(heightDots - 2) { setPixel(2, y); setPixel(widthDots - 3, y) }
-        for origin in [(6, 6), (widthDots - 14, 6), (6, heightDots - 14), (widthDots - 14, heightDots - 14)] {
-            for y in origin.1..<(origin.1 + 8) {
-                for x in origin.0..<(origin.0 + 8) { setPixel(x, y) }
-            }
-        }
-
-        return makeRasterJob(widthDots: widthDots, heightDots: heightDots, pixels: pixels)
+        for x in 2..<(canonicalWidth - 2) { setPixel(x, 2); setPixel(x, canonicalHeight - 3) }
+        for y in 2..<(canonicalHeight - 2) { setPixel(2, y); setPixel(canonicalWidth - 3, y) }
+        return makeRasterJob(canonicalPixels: pixels)
     }
 
-    private static func makeRasterJob(widthDots: Int, heightDots: Int, pixels: [Bool]) -> PrintJob {
-        let bytesPerRow = widthDots / 8
-        var raster = Data([0x1D, 0x76, 0x30, 0x00, UInt8(bytesPerRow), 0x00, UInt8(heightDots & 0xFF), UInt8(heightDots >> 8)])
-        for y in 0..<heightDots {
+    private static func makeRasterJob(canonicalPixels: [Bool]) -> PrintJob {
+        precondition(canonicalPixels.count == canonicalWidth * canonicalHeight)
+        let printerWidth = canonicalHeight
+        let printerHeight = canonicalWidth
+        let bytesPerRow = printerWidth / 8
+        var raster = Data([0x1D, 0x76, 0x30, 0x00, UInt8(bytesPerRow), 0x00, UInt8(printerHeight & 0xFF), UInt8(printerHeight >> 8)])
+        for printerY in 0..<printerHeight {
             for byteIndex in 0..<bytesPerRow {
                 var value: UInt8 = 0
-                for bit in 0..<8 where pixels[y * widthDots + byteIndex * 8 + bit] {
-                    value |= UInt8(1 << (7 - bit))
+                for bit in 0..<8 {
+                    let printerX = byteIndex * 8 + bit
+                    let canonicalX = printerY
+                    let canonicalY = canonicalHeight - 1 - printerX
+                    if canonicalPixels[canonicalY * canonicalWidth + canonicalX] { value |= UInt8(1 << (7 - bit)) }
                 }
                 raster.append(value)
             }
         }
-        return PrintJob(widthDots: widthDots, heightDots: heightDots, raster: raster)
+        return PrintJob(widthDots: printerWidth, heightDots: printerHeight, raster: raster)
     }
 }
 
