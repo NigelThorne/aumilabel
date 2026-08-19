@@ -2,7 +2,6 @@ import Foundation
 import AppKit
 
 enum CLICommand: Equatable {
-    static let defaultAddress = ProcessInfo.processInfo.environment["AUMILABEL_ADDRESS"] ?? ""
     case scan
     case status(address: String, device: String?)
     case connect(address: String, device: String?)
@@ -14,7 +13,7 @@ enum CLICommand: Equatable {
     case printText(lines: [String], font: String, size: Double, inverted: Bool, address: String, device: String?)
     case previewText(lines: [String], font: String, size: Double, inverted: Bool, output: String)
 
-    static func parse(_ arguments: [String]) throws -> CLICommand {
+    static func parse(_ arguments: [String], environment: [String: String] = ProcessInfo.processInfo.environment) throws -> CLICommand {
         guard let action = arguments.first else { throw CLIError.usage("a command is required") }
         var values: [String: String] = [:]
         var textLines: [String] = []
@@ -32,7 +31,7 @@ enum CLICommand: Equatable {
             if flag == "--text" { textLines.append(value) } else { values[flag] = value }
             index += 2
         }
-        let address = values["--address"] ?? defaultAddress
+        let address = values["--address"] ?? environment["AUMILABEL_ADDRESS"] ?? ""
         let device = values["--device"]
         func requireTarget() throws -> (String, String?) {
             guard !address.isEmpty || device != nil else { throw CLIError.usage("--device or --address is required; run `aumilabel scan` first") }
@@ -71,10 +70,11 @@ enum CLICommand: Equatable {
             guard !textLines.isEmpty, textLines.allSatisfy({ !$0.isEmpty }) else { throw CLIError.usage("print requires --text TEXT") }
             let size = Double(values["--size"] ?? "82")
             guard let size, size > 0 else { throw CLIError.usage("--size must be a positive number") }
+            let font = values["--font"] ?? environment["AUMILABEL_FONT"] ?? "SnellRoundhand"
             if isPreview {
-                return .previewText(lines: textLines, font: values["--font"] ?? "SnellRoundhand", size: size, inverted: values["--invert"] == "true", output: values["--output"] ?? "aumilabel-preview.png")
+                return .previewText(lines: textLines, font: font, size: size, inverted: values["--invert"] == "true", output: values["--output"] ?? "aumilabel-preview.png")
             }
-            let target = try requireTarget(); return .printText(lines: textLines, font: values["--font"] ?? "SnellRoundhand", size: size, inverted: values["--invert"] == "true", address: target.0, device: target.1)
+            let target = try requireTarget(); return .printText(lines: textLines, font: font, size: size, inverted: values["--invert"] == "true", address: target.0, device: target.1)
         default: throw CLIError.usage("unknown command: \(action)")
         }
     }

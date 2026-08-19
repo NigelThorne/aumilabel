@@ -2,8 +2,11 @@ import XCTest
 @testable import AumiLabelProbe
 
 final class ProtocolTests: XCTestCase {
-    func testParsesRepeatedTextArgumentsAsLines() throws {
-        let command = try CLICommand.parse(["print", "--text", "Nigel", "--text", "Cath", "--font", "SignPainter", "--size", "72", "--address", "25-00-02-00-26-c4"])
+    func testExplicitFontOverridesEnvironmentDefaultForMultipleLines() throws {
+        let command = try CLICommand.parse(
+            ["print", "--text", "Nigel", "--text", "Cath", "--font", "SignPainter", "--size", "72", "--address", "25-00-02-00-26-c4"],
+            environment: ["AUMILABEL_FONT": "AppleSDGothicNeo-Bold"]
+        )
         XCTAssertEqual(command, .printText(lines: ["Nigel", "Cath"], font: "SignPainter", size: 72, inverted: false, address: "25-00-02-00-26-c4", device: nil))
     }
 
@@ -20,7 +23,7 @@ final class ProtocolTests: XCTestCase {
     }
 
     func testParsesInvertPrintFlag() throws {
-        let command = try CLICommand.parse(["print", "--text", "Nigel", "--invert", "--address", "25-00-02-00-26-c4"])
+        let command = try CLICommand.parse(["print", "--text", "Nigel", "--invert", "--address", "25-00-02-00-26-c4"], environment: [:])
         XCTAssertEqual(command, .printText(lines: ["Nigel"], font: "SnellRoundhand", size: 82, inverted: true, address: "25-00-02-00-26-c4", device: nil))
     }
 
@@ -104,16 +107,29 @@ final class ProtocolTests: XCTestCase {
         XCTAssertGreaterThan(PrinterProtocol.inkRows(in: emoji).count, PrinterProtocol.inkRows(in: empty).count)
     }
 
+    func testUsesEnvironmentFontAsTheDefaultForPrintAndPreview() throws {
+        let environment = ["AUMILABEL_ADDRESS": "11-22-33-44-55-66", "AUMILABEL_FONT": "SignPainter-HouseScript"]
+
+        XCTAssertEqual(
+            try CLICommand.parse(["preview", "--text", "Hello"], environment: environment),
+            .previewText(lines: ["Hello"], font: "SignPainter-HouseScript", size: 82, inverted: false, output: "aumilabel-preview.png")
+        )
+        XCTAssertEqual(
+            try CLICommand.parse(["print", "--text", "Hello"], environment: environment),
+            .printText(lines: ["Hello"], font: "SignPainter-HouseScript", size: 82, inverted: false, address: "11-22-33-44-55-66", device: nil)
+        )
+    }
+
     func testParsesPreviewWithoutAPrinterTarget() throws {
         XCTAssertEqual(
-            try CLICommand.parse(["preview", "--text", "Hello", "--output", "/tmp/label.png"]),
+            try CLICommand.parse(["preview", "--text", "Hello", "--output", "/tmp/label.png"], environment: [:]),
             .previewText(lines: ["Hello"], font: "SnellRoundhand", size: 82, inverted: false, output: "/tmp/label.png")
         )
     }
 
     func testParsesDeviceNameForPrinterLookup() throws {
         XCTAssertEqual(
-            try CLICommand.parse(["print", "--text", "Hello", "--device", "AL-1234"]),
+            try CLICommand.parse(["print", "--text", "Hello", "--device", "AL-1234"], environment: [:]),
             .printText(lines: ["Hello"], font: "SnellRoundhand", size: 82, inverted: false, address: "", device: "AL-1234")
         )
     }
@@ -130,7 +146,7 @@ final class ProtocolTests: XCTestCase {
     }
 
     func testRejectsPrinterCommandsWithoutAnAddress() {
-        XCTAssertThrowsError(try CLICommand.parse(["connect"]))
+        XCTAssertThrowsError(try CLICommand.parse(["connect"], environment: [:]))
     }
 
     func testRejectsPrintWithoutText() {

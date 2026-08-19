@@ -30,6 +30,13 @@ export AUMILABEL_ADDRESS="25-00-02-00-12-34" # replace with your printer's addre
 
 `--address` takes precedence over `--device`, which takes precedence over `AUMILABEL_ADDRESS`. Put a printer in pairing mode before using `--device`; the CLI scans for its exact advertised name.
 
+Set a default text font with `AUMILABEL_FONT`; an explicit `--font` always overrides it:
+
+```bash
+export AUMILABEL_FONT="SignPainter-HouseScript"
+aumilabel print --device AL-1234 --text "Hello"
+```
+
 Load a new roll or fix alignment:
 
 ```bash
